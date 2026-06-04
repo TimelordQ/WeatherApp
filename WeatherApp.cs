@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
+using System.IO;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
@@ -21,6 +22,38 @@ namespace WeatherIdleOverlay
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new WeatherOverlayForm());
+        }
+    }
+
+    public static class IniFile
+    {
+        public static string Read(string path, string section, string key, string defaultValue = "")
+        {
+            if (!File.Exists(path))
+                return defaultValue;
+
+            string[] lines = File.ReadAllLines(path);
+            string currentSection = "";
+
+            foreach (string raw in lines)
+            {
+                string line = raw.Trim();
+
+                if (line.StartsWith("[") && line.EndsWith("]"))
+                {
+                    currentSection = line.Substring(1, line.Length - 2);
+                    continue;
+                }
+
+                if (currentSection.Equals(section, StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = line.Split('=');
+                    if (parts.Length == 2 && parts[0].Trim().Equals(key, StringComparison.OrdinalIgnoreCase))
+                        return parts[1].Trim();
+                }
+            }
+
+            return defaultValue;
         }
     }
 
@@ -61,11 +94,16 @@ namespace WeatherIdleOverlay
         private DateTime _lastUpdated = DateTime.MinValue;
 
         // Your coordinates
-        private static readonly double Lat = 45.688867;
-        private static readonly double Lon = -122.651783;
+        private static double Lat;
+        private static double Lon;
 
         public WeatherOverlayForm()
         {
+            string iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WeatherApp.ini");
+
+            Lat = double.Parse(IniFile.Read(iniPath, "Location", "Latitude", "45.688867"));
+            Lon = double.Parse(IniFile.Read(iniPath, "Location", "Longitude", "-122.651783"));
+
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "WeatherApp/1.0 (Q@example.com)");
 
             AutoScaleMode = AutoScaleMode.None;
