@@ -10,6 +10,6 @@ To display weather for your area, change latitude and longitude in the WeatherAp
         Latitude=45.688867
         Longitude=-122.651783
 
-![Preview](WeatherApp.png)
+![Preview](WeatherApp_Latest.png)
 
 ESCAPE KEY exits
