@@ -593,6 +593,7 @@ namespace WeatherIdleOverlay
 
                 data.Sunrise = DateTime.Parse(ssProps["sunrise"].ToString()).ToLocalTime();
                 data.Sunset = DateTime.Parse(ssProps["sunset"].ToString()).ToLocalTime();
+
             }
             catch
             {
@@ -601,6 +602,14 @@ namespace WeatherIdleOverlay
             }
 
             return data;
+        }
+
+        private void ApplyBackColorRecursive(Control parent, Color bg)
+        {
+            parent.BackColor = bg;
+
+            foreach (Control child in parent.Controls)
+                ApplyBackColorRecursive(child, bg);
         }
 
         private void UpdateUiWithWeather(WeatherData data)
@@ -644,14 +653,10 @@ namespace WeatherIdleOverlay
             }
 
             // ===== DAY/NIGHT BACKGROUND =====
-            // ===== DAY/NIGHT BACKGROUND =====
             DateTime now = DateTime.Now;
-
-            bool isNight =
-                data.Sunrise == DateTime.MinValue ||
-                data.Sunset == DateTime.MinValue ||
-                now < data.Sunrise ||
-                now > data.Sunset;
+            DateTime todaySunset = data.Sunset;
+            DateTime tomorrowSunrise = data.Sunrise;
+            bool isNight = now > todaySunset && now < tomorrowSunrise;
 
             // Colors
             Color dayColor = Color.FromArgb(15, 40, 90);
@@ -659,12 +664,7 @@ namespace WeatherIdleOverlay
 
             Color bg = isNight ? nightColor : dayColor;
 
-            // Form background
-            this.BackColor = bg;
-
-            // 7-day forecast background
-            _lvSevenDay.BackColor = bg;
-            _lvSevenDay.ForeColor = Color.White;
+            ApplyBackColorRecursive(this, bg);
 
             // Chart background
             _chartHourlyRain.BackColor = bg;
