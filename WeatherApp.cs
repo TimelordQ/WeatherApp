@@ -97,6 +97,14 @@ namespace WeatherIdleOverlay
         private static double Lat;
         private static double Lon;
 
+        public static void EnableDoubleBuffer(Control c)
+        {
+            c.GetType().GetProperty("DoubleBuffered",
+                System.Reflection.BindingFlags.NonPublic |
+                System.Reflection.BindingFlags.Instance)
+                ?.SetValue(c, true, null);
+        }
+
         public WeatherOverlayForm()
         {
             string iniPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "WeatherApp.ini");
@@ -117,6 +125,12 @@ namespace WeatherIdleOverlay
             KeyPreview = true;
             ShowInTaskbar = false;
 
+            this.KeyDown += (s, e) =>
+            {
+                if (e.KeyCode == Keys.Escape)
+                    Application.Exit();
+            };
+
             BuildUi();
             SetupClock();
             _weatherTimer.Interval = 5 * 60 * 1000; // 5 minutes
@@ -129,7 +143,7 @@ namespace WeatherIdleOverlay
             if (!_debugging) TopMost = true;
 
             _ = RefreshWeatherSafeAsync();
-        }
+       }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
@@ -257,7 +271,8 @@ namespace WeatherIdleOverlay
                 Left = -10,
                 Top = -15,
                 Width = 500,
-                Height = 160
+                Height = 160,
+                Tag = "CurrentTemp"
             };
             this.Controls.Add(_lblCurrentTemp);
 
@@ -301,16 +316,16 @@ namespace WeatherIdleOverlay
             };
 
             panelRight.RowStyles.Clear();
-            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 80));  // location
-            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));  // date
-            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));  // time
+            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 100));  // location
+            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));  // date
+            panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));  // time
             panelRight.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // last updated
 
             _lblLocation = new Label
             {
                 Dock = DockStyle.Fill,
                 AutoSize = false,
-                Font = new Font("Segoe UI", 28, FontStyle.Bold),
+                Font = new Font("Segoe UI", 40, FontStyle.Bold),
                 TextAlign = ContentAlignment.MiddleRight,
                 Text = "Loading location..."
             };
@@ -318,7 +333,7 @@ namespace WeatherIdleOverlay
             {
                 Dock = DockStyle.Fill,
                 AutoSize = false,
-                Font = new Font("Segoe UI", 20, FontStyle.Regular),
+                Font = new Font("Segoe UI", 32, FontStyle.Regular),
                 TextAlign = ContentAlignment.MiddleRight,
                 Text = ""
             };
@@ -326,7 +341,7 @@ namespace WeatherIdleOverlay
             {
                 Dock = DockStyle.Fill,
                 AutoSize = false,
-                Font = new Font("Segoe UI", 32, FontStyle.Bold),
+                Font = new Font("Segoe UI", 32, FontStyle.Regular),
                 TextAlign = ContentAlignment.MiddleRight,
                 Text = ""
             };
@@ -398,6 +413,11 @@ namespace WeatherIdleOverlay
                     TitleForeColor = Color.White
                 }
             };
+
+            chartArea.AxisX.Interval = 1;
+            chartArea.AxisX.LabelStyle.IsEndLabelVisible = true;
+            chartArea.AxisX.LabelStyle.Angle = -45;   // optional but helps spacing
+
             _chartHourlyRain.ChartAreas.Add(chartArea);
 
             var series = new Series("Rain")
@@ -416,6 +436,16 @@ namespace WeatherIdleOverlay
             root.Controls.Add(_chartHourlyRain, 0, 2);
 
             Controls.Add(root);
+
+            EnableDoubleBuffer(this);    // Enable true double-buffering
+            this.SetStyle(ControlStyles.AllPaintingInWmPaint |
+                          ControlStyles.UserPaint |
+                          ControlStyles.OptimizedDoubleBuffer, true);
+            this.UpdateStyles();
+
+            EnableDoubleBuffer(panelRight);   // the panel with time/date
+            EnableDoubleBuffer(root);         // optional
+            EnableDoubleBuffer(topRow);       // optional
         }
 
         // ====== WEATHER FETCHING ======
@@ -487,7 +517,6 @@ namespace WeatherIdleOverlay
             var humDict = (Dictionary<string, object>)obsProps["relativeHumidity"];
             var humVal = humDict["value"];
             data.HumidityPercent = humVal == null ? 0 : Convert.ToInt32(humVal);
-
             // Wind speed (m/s) — sustained only
             var windSpeedDict = (Dictionary<string, object>)obsProps["windSpeed"];
             var windSpeedVal = windSpeedDict["value"];
@@ -603,13 +632,55 @@ namespace WeatherIdleOverlay
 
             return data;
         }
-
-        private void ApplyBackColorRecursive(Control parent, Color bg)
+        private void MakeTransparent(Control ctrl, int x, int y)
         {
-            parent.BackColor = bg;
+            Bitmap bMap = new Bitmap(this.BackgroundImage);
+            Color[,] pixelArray = new Color[ctrl.Width, ctrl.Height];
+
+            for (int i = 0; i < ctrl.Width; i++)
+            {
+                for (int j = 0; j < ctrl.Height; j++)
+                {
+                    pixelArray[i, j] = bMap.GetPixel(x + i, y + j);
+                }
+            }
+
+            Bitmap bmp = new Bitmap(ctrl.Width, ctrl.Height);
+
+            for (int i = 0; i < ctrl.Width; i++)
+            {
+                for (int j = 0; j < ctrl.Height; j++)
+                {
+                    bmp.SetPixel(i, j, pixelArray[i, j]);
+                }
+            }
+
+            ctrl.BackgroundImage = bmp;
+            ctrl.Location = new Point(x, y);
+        }
+
+        static int levels = 0;
+        private void ApplyBackColorRecursive(Control parent, Color bg, Color fg)
+        {
+            if (parent is ListView)
+            {
+                parent.ForeColor = fg;
+                parent.Font = new Font(parent.Font, FontStyle.Bold);
+            }
+            else
+            {
+                try
+                {
+                    parent.BackColor = bg;
+                    if (parent.Tag != "CurrentTemp") parent.ForeColor = fg;
+                }
+                catch { }
+            }
 
             foreach (Control child in parent.Controls)
-                ApplyBackColorRecursive(child, bg);
+            {
+                ApplyBackColorRecursive(child, bg, fg);
+            }
         }
 
         private void UpdateUiWithWeather(WeatherData data)
@@ -637,10 +708,10 @@ namespace WeatherIdleOverlay
                 : ToCompass(data.WindDirectionDegrees);
 
             string windText = $"{Math.Round(data.WindSpeedMph):0} mph {windDir}";
-            string pressureText = $"{data.BarometricPressureInHg:0.00} inHg";
+            string pressureText = $"{data.BarometricPressureInHg:0.00} in";
 
             _lblHumidity.Text =
-                $"Humidity: {data.HumidityPercent}%   Wind: {windText}   Barometer: {pressureText}";
+                $"Humidity: {data.HumidityPercent}% Wind: {windText} Pressure: {pressureText}";
 
             if (data.Sunrise != DateTime.MinValue && data.Sunset != DateTime.MinValue)
             {
@@ -653,36 +724,82 @@ namespace WeatherIdleOverlay
             }
 
             // ===== DAY/NIGHT BACKGROUND =====
-            DateTime now = DateTime.Now;
-            DateTime todaySunset = data.Sunset;
-            DateTime tomorrowSunrise = data.Sunrise;
-            bool isNight = now > todaySunset && now < tomorrowSunrise;
+            // The API doesn't explicitly say if it's currently day or night, but we can infer it based
+            // on sunrise/sunset times. Whichever one is earlier is the "next" event. If sunrise is
+            // earlier, then it's currently night (waiting for sunrise).
+            DateTime dtNow = DateTime.Now;
+            bool isNight = false;
+            if (data.Sunrise < data.Sunset)
+            {
+                if(dtNow < data.Sunrise || dtNow > data.Sunset)
+                    isNight = true;
+                else
+                    isNight = false;
+            }
+            else if (dtNow > data.Sunset)
+                isNight = true;
+            else if (dtNow > data.Sunrise)
+                isNight = false;
+            else
+            {
+                MessageBox.Show($"What got us here? Unexpected time scenario encountered from NWS. They reported Sunrise={data.Sunrise}, Sunset={data.Sunset}, it's now Now={dtNow}"); // What got us here?
+                Application.Exit();
+            }
 
             // Colors
             Color dayColor = Color.FromArgb(15, 40, 90);
             Color nightColor = Color.Black;
 
+            // TODO SWITCH IMAGE HERE based on isNight
             Color bg = isNight ? nightColor : dayColor;
+            double currentPop = data.HourlyRain.Count > 0
+                ? data.HourlyRain[0].Probability * 100.0
+                : 0;
+            
+            Color fg = Color.White;
+            /*if( isNight )
+            {
+                if (currentPop > 60)
+                    this.BackgroundImage = Image.FromFile("RainyNight.png");
+                else if (currentPop > 30)
+                    this.BackgroundImage = Image.FromFile("CloudyNight.png");
+                else
+                    this.BackgroundImage = Image.FromFile("ClearNight.png");
 
-            ApplyBackColorRecursive(this, bg);
+            }
+            else
+            {
+                if (currentPop > 60)
+                    this.BackgroundImage = Image.FromFile("RainyDay.png");
+                else if (currentPop > 30)
+                    this.BackgroundImage = Image.FromFile("CloudyDay.png");
+                else
+                {
+                    this.BackgroundImage = Image.FromFile("SunnyDay.png");
+                    fg = Color.Black;
+                }
+            }
+
+            bg = Color.FromArgb(0, bg);   // add some transparency
+            */
+            ApplyBackColorRecursive(this, bg, fg);
 
             // Chart background
             _chartHourlyRain.BackColor = bg;
             _chartHourlyRain.ChartAreas[0].BackColor = bg;
 
             // Chart gridlines (dim at night)
-            _chartHourlyRain.ChartAreas[0].AxisX.LineColor = Color.White;
-            _chartHourlyRain.ChartAreas[0].AxisY.LineColor = Color.White;
+            _chartHourlyRain.ChartAreas[0].AxisX.LineColor = fg;
+            _chartHourlyRain.ChartAreas[0].AxisY.LineColor = fg;
             _chartHourlyRain.ChartAreas[0].AxisY.MajorGrid.LineColor =
                 isNight ? Color.FromArgb(60, 60, 60) : Color.FromArgb(40, 80, 140);
 
             // Chart label colors
-            _chartHourlyRain.ChartAreas[0].AxisX.LabelStyle.ForeColor = Color.White;
-            _chartHourlyRain.ChartAreas[0].AxisY.LabelStyle.ForeColor = Color.White;
+            _chartHourlyRain.ChartAreas[0].AxisX.LabelStyle.ForeColor = fg;
+            _chartHourlyRain.ChartAreas[0].AxisY.LabelStyle.ForeColor = fg;
 
             // Chart title color
-            _chartHourlyRain.ChartAreas[0].AxisY.TitleForeColor = Color.White;
-
+            _chartHourlyRain.ChartAreas[0].AxisY.TitleForeColor = fg;
 
             if (!string.IsNullOrEmpty(data.City) || !string.IsNullOrEmpty(data.State))
                 _lblLocation.Text = $"{data.City}, {data.State}";
@@ -705,23 +822,32 @@ namespace WeatherIdleOverlay
             var series = _chartHourlyRain.Series["Rain"];
             series.Points.Clear();
 
+            int index = 0;
+
             foreach (var h in data.HourlyRain)
             {
-                string label = h.Time.ToString("htt").ToLower();
                 double value = h.Probability * 100.0;
+
+                // Label logic
+                string label = (index == 0)
+                    ? "Now"
+                    : h.Time.ToString("htt").ToLower();
 
                 int i = series.Points.AddXY(label, value);
                 var pt = series.Points[i];
 
+                pt.AxisLabel = label;   // <-- THIS is the important line
+
                 pt.ToolTip = $"{label}: {Math.Round(value):0}%";
 
-                // Color coding
                 if (value < 30)
-                    pt.Color = Color.FromArgb(150, 255, 200);      // light green
+                    pt.Color = Color.FromArgb(150, 255, 200);
                 else if (value <= 60)
-                    pt.Color = Color.FromArgb(255, 150, 150);      // light red/pink
+                    pt.Color = Color.FromArgb(255, 150, 150);
                 else
-                    pt.Color = Color.FromArgb(255, 0, 0);          // strong red
+                    pt.Color = Color.FromArgb(255, 0, 0);
+
+                index++;
             }
         }
 
