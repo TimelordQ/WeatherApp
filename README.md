@@ -12,4 +12,4 @@ To display weather for your area, change latitude and longitude in the WeatherAp
 
 ![Preview](WeatherApp.png)
 
-ALT+F4 exits
+ESCAPE KEY exits
