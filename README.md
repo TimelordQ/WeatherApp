@@ -4,6 +4,8 @@ A simplistic full screen weather app which obtains current weather information a
 
 ***Can only be used in the United States***
 
+***Formatted for a 1920x1080 Screen Resolution, may need readjustment for different resolutions***
+
 To display weather for your area, change latitude and longitude in the WeatherApp.INI file depicted below to your location & Save. 
 
         [Location]
