@@ -662,20 +662,12 @@ namespace WeatherIdleOverlay
         static int levels = 0;
         private void ApplyBackColorRecursive(Control parent, Color bg, Color fg)
         {
-            if (parent is ListView)
+            try
             {
-                parent.ForeColor = fg;
-                parent.Font = new Font(parent.Font, FontStyle.Bold);
+                parent.BackColor = bg;
+                if (parent.Tag != "CurrentTemp") parent.ForeColor = fg;
             }
-            else
-            {
-                try
-                {
-                    parent.BackColor = bg;
-                    if (parent.Tag != "CurrentTemp") parent.ForeColor = fg;
-                }
-                catch { }
-            }
+            catch { }
 
             foreach (Control child in parent.Controls)
             {
@@ -731,6 +723,8 @@ namespace WeatherIdleOverlay
             bool isNight = false;
             if (data.Sunrise < data.Sunset)
             {
+                if( dtNow < data.Sunset && dtNow < data.Sunrise)
+                    dtNow = dtNow.AddDays(1);   // handle weird time zone issues
                 if(dtNow < data.Sunrise || dtNow > data.Sunset)
                     isNight = true;
                 else
